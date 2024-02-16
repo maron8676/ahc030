@@ -94,6 +94,32 @@ all_oil = 0
 for field in fields:
     all_oil += len(field)
 
+# いもす法で全パターンの重ね合わせを計算
+acc_grid = [[0] * N for _ in range(N)]
+for field in fields:
+    max_x = 0
+    max_y = 0
+    for cell in field:
+        max_y = max(max_y, cell[0])
+        max_x = max(max_x, cell[1])
+    move_y = N - 1 - max_y
+    move_x = N - 1 - max_x
+    area = (move_y + 1) * (move_x + 1)
+    for cell in field:
+        acc_grid[cell[0]][cell[1]] += 1 / area
+        if cell[0] + move_y + 1 < N:
+            acc_grid[cell[0] + move_y + 1][cell[1]] -= 1 / area
+        if cell[1] + move_x + 1 < N:
+            acc_grid[cell[0]][cell[1] + move_x + 1] -= 1 / area
+        if cell[0] + move_y + 1 < N and cell[1] + move_x + 1 < N:
+            acc_grid[cell[0] + move_y + 1][cell[1] + move_x + 1] += 1 / area
+for i in range(N):
+    for j in range(1, N):
+        acc_grid[i][j] = acc_grid[i][j - 1] + acc_grid[i][j]
+for i in range(1, N):
+    for j in range(N):
+        acc_grid[i][j] = acc_grid[i - 1][j] + acc_grid[i][j]
+
 # drill
 cost = 0
 has_oil = []
@@ -104,6 +130,15 @@ regressor = GaussianProcessRegressor(kernel=ConstantKernel() * RBF() + WhiteKern
 # 0がいくつか見つかるまで掘る
 zero_num = 8
 zero_cell_set = set()
+# 調べなくても0と分かるセルを記録
+for i in range(N):
+    for j in range(N):
+        if acc_grid[i][j] < 1 / N ** 2:
+            point = (i, j)
+            drilled_dict[point] = 0
+            if len(zero_cell_set) < zero_num:
+                zero_cell_set.add(point)
+
 for i in range(N):
     if len(zero_cell_set) >= zero_num:
         break
