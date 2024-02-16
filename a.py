@@ -124,7 +124,7 @@ for i in range(1, N):
 cost = 0
 has_oil = []
 found_oil = 0
-drilled_dict = dict()
+drilled_dict = [[-1] * N for _ in range(N)]
 regressor = GaussianProcessRegressor(kernel=ConstantKernel() * RBF() + WhiteKernel(), alpha=0.)
 
 # 0がいくつか見つかるまで掘る
@@ -135,7 +135,7 @@ for i in range(N):
     for j in range(N):
         if acc_grid[i][j] < 1 / N ** 2:
             point = (i, j)
-            drilled_dict[point] = 0
+            drilled_dict[point[0]][point[1]] = 0
             if len(zero_cell_set) < zero_num:
                 zero_cell_set.add(point)
 
@@ -150,7 +150,7 @@ for i in range(N):
         resp = int(operate("q", points))
 
         found_oil += resp
-        drilled_dict[point] = resp
+        drilled_dict[point[0]][point[1]] = resp
         if resp == 0:
             zero_cell_set.add(point)
         else:
@@ -163,13 +163,15 @@ for i in range(N):
         x_test.append(point)
 x_train = []
 y_train = []
-for key in drilled_dict:
-    x_train.append(key)
-    y_train.append(drilled_dict[key])
+for i in range(N):
+    for j in range(N):
+        if drilled_dict[i][j] != -1:
+            x_train.append((i, j))
+            y_train.append(drilled_dict[i][j])
 for i in range(N):
     for j in range(N):
         point = (i, j)
-        if point in drilled_dict:
+        if drilled_dict[i][j] != -1:
             continue
         if (i + j) % 2 == 1:
             continue
@@ -190,21 +192,51 @@ for i in range(N):
     for j in range(N):
         p = i * N + j
         predict_with_pos.append(((i, j), y_pred[p]))
-predict_with_pos.sort(key=lambda x: x[1], reverse=True)
+predict_with_pos.sort(key=lambda x: x[1])
 
 # 埋まってそうなところから掘る
-for predict in predict_with_pos:
+# 埋まっているところを見つけたら周りを掘る
+move_list = [(1, 0), (-1, 0), (0, 1), (0, -1)]
+adjacent = set()
+while len(predict_with_pos) > 0:
     if found_oil >= all_oil:
         break
 
+    while len(adjacent) > 0:
+        if found_oil >= all_oil:
+            break
+
+        # 隣接で掘ってないところがあれば掘る
+        point = adjacent.pop()
+        if drilled_dict[point[0]][point[1]] != -1:
+            continue
+
+        points = [point]
+        resp = int(operate("q", points))
+        found_oil += resp
+        drilled_dict[point[0]][point[1]] = resp
+
+        if resp != 0:
+            has_oil.append(point)
+            for move in move_list:
+                if 0 <= point[0] + move[0] < N and 0 <= point[1] + move[1] < N:
+                    adjacent.add((point[0] + move[0], point[1] + move[1]))
+    if found_oil >= all_oil:
+        break
+
+    predict = predict_with_pos.pop()
     point = predict[0]
-    if point in drilled_dict:
+    if drilled_dict[point[0]][point[1]] != -1:
         continue
     points = [point]
     resp = int(operate("q", points))
     found_oil += resp
+    drilled_dict[point[0]][point[1]] = resp
     if resp != 0:
         has_oil.append(point)
+        for move in move_list:
+            if 0 <= point[0] + move[0] < N and 0 <= point[1] + move[1] < N:
+                adjacent.add((point[0] + move[0], point[1] + move[1]))
 
 resp = operate("a", has_oil)
 assert found_oil == all_oil
