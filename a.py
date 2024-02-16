@@ -94,6 +94,8 @@ all_oil = 0
 for field in fields:
     all_oil += len(field)
 
+move_list = [(1, 0), (-1, 0), (0, 1), (0, -1)]
+
 # いもす法で全パターンの重ね合わせを計算
 acc_grid = [[0] * N for _ in range(N)]
 for field in fields:
@@ -126,6 +128,7 @@ has_oil = []
 found_oil = 0
 drilled_dict = [[-1] * N for _ in range(N)]
 regressor = GaussianProcessRegressor(kernel=ConstantKernel() * RBF() + WhiteKernel(), alpha=0.)
+adjacent = set()
 
 # 0がいくつか見つかるまで掘る
 zero_num = 8
@@ -155,6 +158,9 @@ for i in range(N):
             zero_cell_set.add(point)
         else:
             has_oil.append(point)
+            for move in move_list:
+                if 0 <= point[0] + move[0] < N and 0 <= point[1] + move[1] < N:
+                    adjacent.add((point[0] + move[0], point[1] + move[1]))
 
 x_test = []
 for i in range(N):
@@ -196,8 +202,6 @@ predict_with_pos.sort(key=lambda x: x[1])
 
 # 埋まってそうなところから掘る
 # 埋まっているところを見つけたら周りを掘る
-move_list = [(1, 0), (-1, 0), (0, 1), (0, -1)]
-adjacent = set()
 while len(predict_with_pos) > 0:
     if found_oil >= all_oil:
         break
