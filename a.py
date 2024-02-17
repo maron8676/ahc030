@@ -133,7 +133,7 @@ regressor = GaussianProcessRegressor(kernel=ConstantKernel() * RBF() + WhiteKern
 adjacent = set()
 
 # 0がいくつか見つかるまで掘る
-zero_num = 8
+zero_num = 15 if eps <= 0.05 else 8 if eps <= 0.15 else 3 if eps <= 0.18 else 0
 zero_cell_set = set()
 # 調べなくても0と分かるセルを記録
 for i in range(N):
@@ -213,8 +213,8 @@ for i in range(N):
         predict_with_pos.append(((i, j), estimated[i][j]))
 predict_with_pos.sort(key=lambda x: x[1])
 
-# NとMが小さいとき、全パターン作る
-if N <= 15 and M == 2 and eps <= 0.15:
+# Mが小さいとき、全パターン作る
+if M == 2:
     grid_candidates = dict()
 
     move_xy_list = []
