@@ -1,4 +1,5 @@
 import getpass
+import itertools
 import math
 import random
 import sys
@@ -56,6 +57,25 @@ def operate(o_type, points):
     # 標準の値から変換
     value = round(e * math.sqrt(variance) + mean)
     return str(max(0, value))
+
+
+def possible_oil(y, x, field):
+    """
+    y,xの位置に配置可能か判定する
+    :param y:
+    :param x:
+    :param field:
+    :return:
+    """
+    global drilled_dict
+
+    for cell in field:
+        yy = y + cell[0]
+        xx = x + cell[1]
+        if drilled_dict[yy][xx] == 0:
+            return False
+
+    return True
 
 
 is_local = getpass.getuser() == "omotl"
@@ -134,6 +154,8 @@ adjacent = set()
 
 # 0がいくつか見つかるまで掘る
 zero_num = 15 if eps <= 0.05 else 8 if eps <= 0.15 else 3 if eps <= 0.18 else 0
+if 3 <= M <= 6 and eps >= 0.10:
+    zero_num = 0
 zero_cell_set = set()
 # 調べなくても0と分かるセルを記録
 for i in range(N):
@@ -165,18 +187,9 @@ for i in range(N):
                     adjacent.add((point[0] + move[0], point[1] + move[1]))
 
 estimated = [[-1] * N for _ in range(N)]
-x_test = []
-for i in range(N):
-    for j in range(N):
-        point = (i, j)
-        x_test.append(point)
-x_train = []
-y_train = []
 for i in range(N):
     for j in range(N):
         if drilled_dict[i][j] != -1:
-            x_train.append((i, j))
-            y_train.append(drilled_dict[i][j])
             estimated[i][j] = drilled_dict[i][j]
 for i in range(N):
     for j in range(N):
@@ -189,14 +202,16 @@ for i in range(N):
         points = [point]
         points.extend(zero_cell_set)
         resp = int(operate("q", points))
-
-        x_train.append(point)
-        y_train.append(max(0., resp - eps * (zero_num + 1)))
-        estimated[i][j] = max(0., resp - eps * (zero_num + 1))
-# regressor.fit(x_train, y_train)
-# y_pred, y_std = regressor.predict(x_test, return_std=True)
-# for i in range(N):
-#     print(f"# {y_pred[i * N:(i + 1) * N]}")
+        estimated[i][j] = max(0., resp - eps * (zero_num + 1)) if zero_num > 0 else resp
+        # 確定情報を反映
+        if len(points) == 1:
+            drilled_dict[i][j] = resp
+            found_oil += resp
+            if resp > 0:
+                has_oil.append(point)
+                for move in move_list:
+                    if 0 <= point[0] + move[0] < N and 0 <= point[1] + move[1] < N:
+                        adjacent.add((point[0] + move[0], point[1] + move[1]))
 for i in range(N):
     for j in range(N):
         if estimated[i][j] == -1:
@@ -258,6 +273,55 @@ if M == 2:
             field = fields[j]
             for cell in field:
                 points.add((cell[0] + loss[0][j * 2], cell[1] + loss[0][j * 2 + 1]))
+        resp = operate("a", points)
+        if resp == "1":
+            sys.exit()
+elif 3 <= M <= 6 and eps >= 0.10:
+    grid_candidates = dict()
+
+    move_xy_lists = []
+    for i in range(M):
+        move_xy_list = []
+        field = fields[i]
+        max_x = 0
+        max_y = 0
+        for cell in field:
+            max_y = max(max_y, cell[0])
+            max_x = max(max_x, cell[1])
+        move_y = N - 1 - max_y
+        move_x = N - 1 - max_x
+
+        for y in range(move_y + 1):
+            for x in range(move_x + 1):
+                if possible_oil(y, x, field):
+                    move_xy_list.append((y, x))
+        move_xy_lists.append(move_xy_list)
+
+    for moves in itertools.product(*move_xy_lists):
+        grid = [[0] * N for _ in range(N)]
+        for i in range(len(move_xy_lists)):
+            for cell in fields[i]:
+                grid[cell[0] + moves[i][0]][cell[1] + moves[i][1]] += 1
+        grid_candidates[moves] = grid
+
+    loss_list = []
+    for key in grid_candidates:
+        loss = 0
+        value = grid_candidates[key]
+        for i in range(N):
+            for j in range(N):
+                p = i * N + j
+                loss += (estimated[i][j] - value[i][j]) ** 2
+        loss_list.append((key, loss))
+    loss_list.sort(key=lambda x: x[1])
+
+    for i in range(len(loss_list)):
+        loss = loss_list[i]
+        points = set()
+        for j in range(len(fields)):
+            field = fields[j]
+            for cell in field:
+                points.add((cell[0] + loss[0][j][0], cell[1] + loss[0][j][1]))
         resp = operate("a", points)
         if resp == "1":
             sys.exit()
