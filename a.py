@@ -1,6 +1,8 @@
 import getpass
 import math
 import random
+import sys
+
 from sklearn.gaussian_process import GaussianProcessRegressor
 from sklearn.gaussian_process.kernels import RBF
 from sklearn.gaussian_process.kernels import ConstantKernel, WhiteKernel
@@ -162,6 +164,7 @@ for i in range(N):
                 if 0 <= point[0] + move[0] < N and 0 <= point[1] + move[1] < N:
                     adjacent.add((point[0] + move[0], point[1] + move[1]))
 
+estimated = [[-1] * N for _ in range(N)]
 x_test = []
 for i in range(N):
     for j in range(N):
@@ -174,6 +177,7 @@ for i in range(N):
         if drilled_dict[i][j] != -1:
             x_train.append((i, j))
             y_train.append(drilled_dict[i][j])
+            estimated[i][j] = drilled_dict[i][j]
 for i in range(N):
     for j in range(N):
         point = (i, j)
@@ -188,17 +192,75 @@ for i in range(N):
 
         x_train.append(point)
         y_train.append(max(0., resp - eps * (zero_num + 1)))
-regressor.fit(x_train, y_train)
-y_pred, y_std = regressor.predict(x_test, return_std=True)
+        estimated[i][j] = max(0., resp - eps * (zero_num + 1))
+# regressor.fit(x_train, y_train)
+# y_pred, y_std = regressor.predict(x_test, return_std=True)
 # for i in range(N):
 #     print(f"# {y_pred[i * N:(i + 1) * N]}")
+for i in range(N):
+    for j in range(N):
+        if estimated[i][j] == -1:
+            values = []
+            for move in move_list:
+                if 0 <= i + move[0] < N and 0 <= j + move[1] < N:
+                    values.append(estimated[i + move[0]][j + move[1]])
+            estimated[i][j] = sum(values) / len(values)
 
 predict_with_pos = []
 for i in range(N):
     for j in range(N):
         p = i * N + j
-        predict_with_pos.append(((i, j), y_pred[p]))
+        predict_with_pos.append(((i, j), estimated[i][j]))
 predict_with_pos.sort(key=lambda x: x[1])
+
+# NとMが小さいとき、全パターン作る
+if N <= 15 and M == 2 and eps <= 0.15:
+    grid_candidates = dict()
+
+    move_xy_list = []
+    for i in range(M):
+        field = fields[i]
+        max_x = 0
+        max_y = 0
+        for cell in field:
+            max_y = max(max_y, cell[0])
+            max_x = max(max_x, cell[1])
+        move_y = N - 1 - max_y
+        move_x = N - 1 - max_x
+        move_xy_list.append((move_y, move_x))
+
+    for i1 in range(move_xy_list[0][0] + 1):
+        for i2 in range(move_xy_list[0][1] + 1):
+            for j1 in range(move_xy_list[1][0] + 1):
+                for j2 in range(move_xy_list[1][1] + 1):
+                    grid = [[0] * N for _ in range(N)]
+                    for cell in fields[0]:
+                        grid[cell[0] + i1][cell[1] + i2] += 1
+                    for cell in fields[1]:
+                        grid[cell[0] + j1][cell[1] + j2] += 1
+                    grid_candidates[(i1, i2, j1, j2)] = grid
+
+    loss_list = []
+    for key in grid_candidates:
+        loss = 0
+        value = grid_candidates[key]
+        for i in range(N):
+            for j in range(N):
+                p = i * N + j
+                loss += (estimated[i][j] - value[i][j]) ** 2
+        loss_list.append((key, loss))
+    loss_list.sort(key=lambda x: x[1])
+
+    for i in range(len(loss_list)):
+        loss = loss_list[i]
+        points = set()
+        for j in range(len(fields)):
+            field = fields[j]
+            for cell in field:
+                points.add((cell[0] + loss[0][j * 2], cell[1] + loss[0][j * 2 + 1]))
+        resp = operate("a", points)
+        if resp == "1":
+            sys.exit()
 
 # 埋まってそうなところから掘る
 # 埋まっているところを見つけたら周りを掘る
